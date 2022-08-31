@@ -1,0 +1,331 @@
+<!doctype html> 
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8" />
+    <title>Game with Phaser3</title>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+
+
+var config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    physics: {
+        default: 'arcade',
+        arcade: {
+            gravity: { y: 700 },
+            debug: false
+        }
+    },
+    scene: {
+        preload: preload,
+        create: create,
+        update: update
+    }
+};
+
+var player;
+var stars;
+var bombs;
+var platforms;
+var cursors;
+var score = 0;
+var gameOver = false;
+var scoreText;
+
+var jump_check = false;
+var trampolins;    
+var slime;  
+var check_slime = true;
+var vidas =3;
+
+
+var game = new Phaser.Game(config);
+
+function preload ()
+{
+    this.load.image('sky', 'assets/fondo.png');
+    this.load.image('ground', 'assets/platform.png');
+    this.load.image('star', 'assets/star.png');
+    this.load.image('bomb', 'assets/bomb.png');
+    this.load.spritesheet('dude', 'assets/dude.png', { frameWidth: 32, frameHeight: 48 });
+    this.load.image('trampolin', 'assets/buttom.png');
+    this.load.spritesheet('slime', 'assets/slime_idle_anim_strip_5.png',{frameWidth: 16, frameHeight: 16});
+    this.load.spritesheet('heart', 'assets/hearts_hud.png',{frameWidth: 16, frameHeight: 16});
+    
+}
+
+function create ()
+{
+    //  A simple background for our game
+    this.add.image(400, 300, 'sky');
+
+    //  The platforms group contains the ground and the 2 ledges we can jump on
+    platforms = this.physics.add.staticGroup();
+    
+    //  Here we create the ground.
+    //  Scale it to fit the width of the game (the original sprite is 400x32 in size)
+    platforms.create(400, 568, 'ground').setScale(2).refreshBody();
+    
+    //  Now let's create some ledges
+    platforms.create(800, 350, 'ground');
+    platforms.create(0, 350, 'ground');
+    //platforms.create(400, 200, 'ground');
+    
+    //trampolines
+    trampolins = this.physics.add.staticGroup();
+    trampolins.create(280,530, 'trampolin').setScale(2).refreshBody();
+    trampolins.create(520,530, 'trampolin').setScale(2).refreshBody();
+
+    // The player and its settings
+    player = this.physics.add.sprite(30, 470, 'dude');
+    
+    //slime
+    slime = this.physics.add.staticSprite(400, 520, 'slime').setScale(2);
+    slime2 = this.physics.add.staticSprite(100, 318, 'slime').setScale(2);
+    slime3 = this.physics.add.staticSprite(700, 318, 'slime').setScale(2);
+    
+    //heart
+    heart2 = this.physics.add.staticSprite(700, 30, 'heart');
+    heart = this.physics.add.staticSprite(650, 30, 'heart');
+    heart3 = this.physics.add.staticSprite(750, 30, 'heart');
+
+    //  Player physics properties. Give the little guy a slight bounce.
+    player.setCollideWorldBounds(true);
+
+    //  Our player animations, turning, walking left and walking right.
+    this.anims.create({
+        key: 'left',
+        frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+        frameRate: 10,
+        repeat: -1
+    });
+
+    this.anims.create({
+        key: 'turn',
+        frames: [ { key: 'dude', frame: 4 } ],
+        frameRate: 40
+    });
+
+    this.anims.create({
+        key: 'right',
+        frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+        frameRate: 10,
+        repeat: -1
+        
+    });
+
+    //slime animation
+    this.anims.create({
+        key: 'turn_slime',
+        frames: this.anims.generateFrameNumbers('slime', { start: 0, end: 5 }),
+        frameRate: 10,
+        repeat: -1
+    });
+
+    //  Input Events
+    cursors = this.input.keyboard.createCursorKeys();
+
+    //  Some stars to collect, 12 in total, evenly spaced 70 pixels apart along the x axis
+    stars = this.physics.add.group({
+        key: 'star',
+        repeat: 7,
+        setXY: { x: 30, y: 150, stepX: 105 }
+    });
+
+    stars.children.iterate(function (child) {
+
+        //  Give each star a slightly different bounce
+       //child.setBounceY(Phaser.Math.FloatBetween(0.7, 0.95));
+        child.setBounce(1);
+
+    });
+
+    bombs = this.physics.add.group();
+    
+    //  The score
+    scoreText = this.add.text(16, 16, 'score: 0', { fontSize: '32px', fill: '#000' });
+
+    //  Collide the player and the stars with the platforms
+    this.physics.add.collider(player, platforms);
+    this.physics.add.collider(stars, platforms);
+    this.physics.add.collider(bombs, platforms);
+
+    //  Checks to see if the player overlaps with any of the stars, if he does call the collectStar function
+    this.physics.add.overlap(player, stars, collectStar, null, this);
+    
+    this.physics.add.collider(player, bombs, hitBomb, null, this);
+    
+    this.physics.add.collider(player, trampolins, collectTrampolin, null, this);
+
+    this.physics.add.collider(player, slime, hitSlime, null, this);
+    this.physics.add.collider(player, slime2, hitSlime, null, this);
+    this.physics.add.collider(player, slime3, hitSlime, null, this);
+}
+
+function update ()
+{
+    if (gameOver)
+    {
+        return;
+    }
+
+    if (cursors.left.isDown)
+    {
+        player.setVelocityX(-130);
+
+        player.anims.play('left', true);
+    }
+    else if (cursors.right.isDown)
+    {
+        player.setVelocityX(130);
+
+        player.anims.play('right', true);
+    }
+    else
+    {
+        player.setVelocityX(0);
+
+        player.anims.play('turn');
+    }
+
+    //Salto doble
+    if(player.body.touching.down){
+        jump_check=false;
+    }
+
+    if (cursors.down.isDown && jump_check==false)
+    {
+        player.setVelocityY(-300);
+        jump_check = true;
+    }
+
+    if (cursors.up.isDown && player.body.touching.down)
+    {
+        player.setVelocityY(-350);
+        jump_check = false;
+    }
+
+    //slime idle animation
+    if (check_slime==true){
+        slime.anims.play('turn_slime', true);
+        slime2.anims.play('turn_slime', true);
+        slime3.anims.play('turn_slime', true);
+    }
+
+}
+
+function collectStar (player, star)
+{
+    star.disableBody(true, true);
+
+    //  Add and update the score
+    score += 10;
+    scoreText.setText('Score: ' + score);
+
+    if (stars.countActive(true) === 0)
+    {
+        //  A new batch of stars to collect
+        stars.children.iterate(function (child) {
+
+            child.enableBody(true, child.x, 0, true, true);
+
+        });
+
+        var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+
+        var bomb = bombs.create(x, 16, 'bomb');
+        bomb.setBounce(1);
+        bomb.setCollideWorldBounds(true);
+        bomb.setVelocity(Phaser.Math.Between(-200, 200), 20);
+        bomb.allowGravity = false;
+
+    }
+}
+
+
+function hitBomb (player1, bomb)
+{
+    player1.disableBody(true,true);
+    
+    //Se vuelve a crear otro player
+    player = this.physics.add.sprite(30, 470, 'dude');
+    player.setCollideWorldBounds(true);
+    this.physics.add.collider(player, platforms);
+    this.physics.add.overlap(player, stars, collectStar, null, this);
+    this.physics.add.collider(player, bombs, hitBomb, null, this);        
+    this.physics.add.collider(player, trampolins, collectTrampolin, null, this);
+    this.physics.add.collider(player, slime, hitSlime, null, this);
+    if(vidas==3){
+            heart3.disableBody(true,true);   
+        }
+        if(vidas==2){
+            heart2.disableBody(true,true);
+        }
+        if(vidas==1){
+            player.setTint(0xff0000);
+            player.anims.play('turn');
+            heart.disableBody(true,true);
+            gameOver = true;
+            this.physics.pause();
+        }
+        vidas-=1;
+}
+
+function collectTrampolin(player, trampolin)
+{
+    player.setVelocityY(-550);
+}
+
+function hitSlime(player1, slime1)
+{ 
+    if(slime1.body.position.y < player.body.position.y +45){
+        player1.disableBody(true,true);
+    
+        //Se vuelve a crear otro player
+        player = this.physics.add.sprite(30, 470, 'dude');
+        player.setCollideWorldBounds(true);
+        this.physics.add.collider(player, platforms);
+        this.physics.add.overlap(player, stars, collectStar, null, this);
+        this.physics.add.collider(player, bombs, hitBomb, null, this);        
+        this.physics.add.collider(player, trampolins, collectTrampolin, null, this);
+        this.physics.add.collider(player, slime, hitSlime, null, this);
+        this.physics.add.collider(player, slime2, hitSlime, null, this);
+        this.physics.add.collider(player, slime3, hitSlime, null, this);
+
+        if(vidas==3){
+            heart3.disableBody(true,true);   
+        }
+        if(vidas==2){
+            heart2.disableBody(true,true);
+        }
+        if(vidas==1){
+            player.setTint(0xff0000);
+            player.anims.play('turn');
+            heart.disableBody(true,true);
+            gameOver = true;
+            this.physics.pause();
+        }
+        vidas-=1;
+    }
+    else{
+        slime1.disableBody(true,true);
+        player.setVelocityY(-350); 
+        score += 30;
+        scoreText.setText('Score: ' + score);
+    }
+}
+
+</script>
+
+</body>
+</html>
